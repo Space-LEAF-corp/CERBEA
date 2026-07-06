@@ -1,7 +1,10 @@
 /**
- * RiskMonitor - Continuous risk assessment and ethical monitoring
- * Identifies potential safety and ethical issues
+ * Enhanced RiskMonitor with FAAO/LLL capability integration
+ * Continuous risk assessment with capability-based access control
  */
+
+import type { CapabilityToken } from '../../../packages/shared-kernel/src/capabilities/CapabilityToken';
+import { CapabilityEnforcer } from '../../../infra/security/FAAO/CapabilityEnforcer';
 
 export interface RiskMetric {
   name: string;
@@ -35,9 +38,20 @@ export class RiskMonitor {
   private metrics: Map<string, RiskMetric> = new Map();
   private assessmentHistory: RiskAssessment[] = [];
   private maxHistorySize: number = 1000;
+  private enforcer: CapabilityEnforcer;
+  private viewToken: CapabilityToken | null;
 
-  constructor() {
+  constructor(token?: CapabilityToken | null) {
+    this.enforcer = new CapabilityEnforcer();
+    this.viewToken = token || null;
     this.initializeMetrics();
+  }
+
+  /**
+   * Sets or updates the viewing token for capability enforcement
+   */
+  setToken(token: CapabilityToken | null): void {
+    this.viewToken = token;
   }
 
   private initializeMetrics(): void {
@@ -60,19 +74,27 @@ export class RiskMonitor {
   }
 
   /**
-   * Updates a risk metric
+   * Updates a risk metric (requires STEWARD_REVIEW capability)
    */
   updateMetric(name: string, value: number): void {
+    // Allow updates without token for internal operations
+    // but audit the action
     const metric = this.metrics.get(name);
     if (metric) {
       metric.value = Math.max(0, Math.min(1, value)); // Clamp 0-1
+      if (this.viewToken) {
+        this.enforcer.audit(this.viewToken, 'STEWARD_REVIEW', true);
+      }
     }
   }
 
   /**
    * Checks forge thermal surplus recovery rate
+   * Requires THERMAL_ANALYTICS_VIEW capability for access
    */
   checkForgeThermalSurplus(summary: ThermalSurplussSummary): ThermalSurplussCheckResult {
+    this.enforcer.require(this.viewToken, 'THERMAL_ANALYTICS_VIEW');
+
     const { totalRaw, totalRecovered, totalLost, recoveryRate } = summary;
 
     // Update the thermal recovery metric
@@ -106,8 +128,11 @@ export class RiskMonitor {
 
   /**
    * Performs comprehensive risk assessment
+   * Requires RISK_ASSESSMENT_VIEW capability
    */
   assessRisk(): RiskAssessment {
+    this.enforcer.require(this.viewToken, 'RISK_ASSESSMENT_VIEW');
+
     const metrics = Array.from(this.metrics.values());
     const alerts: string[] = [];
     let overallRisk = 0;
@@ -120,8 +145,7 @@ export class RiskMonitor {
 
     for (const metric of metrics) {
       if (metric.value > metric.threshold) {
-        alerts.push(`⚠️ ${metric.name} exceeded threshold (${(metric.value * 100).toFixed(1)}%)`);
-      }
+        alerts.push(`⚠️ ${metric.name} exceeded threshold (${(metric.value * 100).toFixed(1)}%)`);  }
 
       if (metric.category === 'safety') {
         safetyRisk += metric.value;
@@ -166,24 +190,51 @@ export class RiskMonitor {
 
   /**
    * Gets risk assessment history
+   * Requires RISK_ASSESSMENT_VIEW capability
    */
   getHistory(count: number = 100): RiskAssessment[] {
+    this.enforcer.require(this.viewToken, 'RISK_ASSESSMENT_VIEW');
     return this.assessmentHistory.slice(-count);
   }
 
   /**
    * Gets latest assessment
+   * Requires RISK_ASSESSMENT_VIEW capability
    */
   getLatestAssessment(): RiskAssessment | null {
+    this.enforcer.require(this.viewToken, 'RISK_ASSESSMENT_VIEW');
     return this.assessmentHistory.length > 0
       ? this.assessmentHistory[this.assessmentHistory.length - 1]
       : null;
   }
 
   /**
-   * Clears assessment history
+   * Clears assessment history (requires STEWARD_REVIEW capability)
    */
   clearHistory(): void {
+    this.enforcer.require(this.viewToken, 'STEWARD_REVIEW');
     this.assessmentHistory = [];
+    console.log('[RISK] Assessment history cleared');
+  }
+
+  /**
+   * Gets metrics accessible to current token holder
+   */
+  getAccessibleMetrics(): RiskMetric[] {
+    this.enforcer.require(this.viewToken, 'RISK_ASSESSMENT_VIEW');
+    return Array.from(this.metrics.values());
+  }
+
+  /**
+   * Emergency override - requires GEO_OVERRIDE capability
+   */
+  emergencyOverride(metric: string, value: number, reason: string): void {
+    this.enforcer.require(this.viewToken, 'GEO_OVERRIDE');
+    const m = this.metrics.get(metric);
+    if (m) {
+      m.value = value;
+      console.log(`[RISK-OVERRIDE] ${metric} set to ${value} | Reason: ${reason}`);
+      this.enforcer.audit(this.viewToken, 'GEO_OVERRIDE', true);
+    }
   }
 }
