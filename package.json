@@ -1,0 +1,42 @@
+{
+  "name": "cerbea",
+  "version": "1.0.0",
+  "description": "Energy recycling and advanced structure for engineering level",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*",
+    "infra/*"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint .",
+    "start": "node dist/index.js",
+    "start:orchestrator": "npm run build && node services/cerbea-orchestrator/dist/index.js",
+    "start:sim": "npm run build && node apps/simulation-suite/dist/FullSystemSim.js",
+    "clean": "find . -name 'dist' -type d -exec rm -rf {} + 2>/dev/null || true",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "energy",
+    "recycling",
+    "engineering",
+    "grid",
+    "sustainability"
+  ],
+  "author": "Space-LEAF Corporation",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^18.15.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.0",
+    "@typescript-eslint/parser": "^5.59.0",
+    "eslint": "^8.40.0",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  }
+}
