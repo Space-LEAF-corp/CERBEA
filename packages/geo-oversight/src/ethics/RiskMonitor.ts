@@ -18,6 +18,19 @@ export interface RiskAssessment {
   requiresStewardReview: boolean;
 }
 
+export interface ThermalSurplussCheckResult {
+  level: 'ok' | 'warning' | 'critical';
+  reason: string;
+  recommendation?: string;
+}
+
+export interface ThermalSurplussSummary {
+  totalRaw: number;
+  totalRecovered: number;
+  totalLost: number;
+  recoveryRate: number;
+}
+
 export class RiskMonitor {
   private metrics: Map<string, RiskMetric> = new Map();
   private assessmentHistory: RiskAssessment[] = [];
@@ -35,6 +48,7 @@ export class RiskMonitor {
       { name: 'child-safe-status', category: 'safety' as const, threshold: 0.5 },
       { name: 'steward-override-frequency', category: 'ethical' as const, threshold: 0.3 },
       { name: 'material-disposal-risk', category: 'ethical' as const, threshold: 0.6 },
+      { name: 'forge-thermal-recovery', category: 'operational' as const, threshold: 0.9 },
     ];
 
     for (const m of defaultMetrics) {
@@ -53,6 +67,41 @@ export class RiskMonitor {
     if (metric) {
       metric.value = Math.max(0, Math.min(1, value)); // Clamp 0-1
     }
+  }
+
+  /**
+   * Checks forge thermal surplus recovery rate
+   */
+  checkForgeThermalSurplus(summary: ThermalSurplussSummary): ThermalSurplussCheckResult {
+    const { totalRaw, totalRecovered, totalLost, recoveryRate } = summary;
+
+    // Update the thermal recovery metric
+    const riskValue = 1 - recoveryRate; // Invert: lower recovery = higher risk
+    this.updateMetric('forge-thermal-recovery', riskValue);
+
+    // Critical: recovery rate significantly below target
+    if (recoveryRate < 0.85) {
+      return {
+        level: 'critical',
+        reason: `Forge thermal recovery critically low: ${(recoveryRate * 100).toFixed(1)}% (below 85% threshold)`,
+        recommendation: 'Immediate inspection required. Check thermal containment and recovery systems.',
+      };
+    }
+
+    // Warning: recovery rate below optimal
+    if (recoveryRate < 0.9) {
+      return {
+        level: 'warning',
+        reason: `Forge thermal recovery below threshold: ${(recoveryRate * 100).toFixed(1)}%`,
+        recommendation: 'Monitor thermal efficiency. Schedule maintenance if trend continues.',
+      };
+    }
+
+    // OK: recovery rate acceptable
+    return {
+      level: 'ok',
+      reason: `Forge thermal recovery nominal: ${(recoveryRate * 100).toFixed(1)}%`,
+    };
   }
 
   /**
@@ -129,5 +178,12 @@ export class RiskMonitor {
     return this.assessmentHistory.length > 0
       ? this.assessmentHistory[this.assessmentHistory.length - 1]
       : null;
+  }
+
+  /**
+   * Clears assessment history
+   */
+  clearHistory(): void {
+    this.assessmentHistory = [];
   }
 }
