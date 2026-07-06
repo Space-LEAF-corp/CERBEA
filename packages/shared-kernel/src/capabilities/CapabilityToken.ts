@@ -1,94 +1,73 @@
 /**
- * CapabilityToken - Authorization and capability management
- * Enables fine-grained permission control across CERBEA modules
+ * CapabilityToken - FAAO/LLL Capability-based Access Control
+ * Defines tokens, capabilities, and verification for distributed authorization
  */
+
+export type Capability =
+  | 'DEN_BALANCE'
+  | 'FORGE_SMELT'
+  | 'THERMAL_ANALYTICS_VIEW'
+  | 'GEO_OVERRIDE'
+  | 'CHILD_ZONE_ISOLATE'
+  | 'SIMULATION_RUN'
+  | 'STEWARD_REVIEW'
+  | 'ENERGY_TRANSFER'
+  | 'RISK_ASSESSMENT_VIEW';
 
 export interface CapabilityToken {
-  /** Unique token identifier */
   id: string;
-
-  /** Entity that holds this capability */
-  holder: string;
-
-  /** Capability name (e.g., 'modify-energy-flow', 'override-safety') */
-  capability: string;
-
-  /** Scope of capability (local, grid, system-wide) */
-  scope: 'local' | 'grid' | 'system';
-
-  /** Issue timestamp */
-  issuedAt: Date;
-
-  /** Expiration timestamp */
-  expiresAt: Date;
-
-  /** Is this capability currently active */
-  active: boolean;
-
-  /** Optional constraints on capability use */
-  constraints?: string[];
-
-  /** Audit trail */
-  auditLog?: string[];
+  subjectId: string; // steward id, node id, service id
+  issuedAt: number;
+  expiresAt: number;
+  capabilities: Capability[];
+  signature: string; // FAAO/LLL signed
+  role?: 'CAPTAIN' | 'ENGINEER' | 'STUDENT' | 'CHILD' | 'SERVICE';
 }
 
 /**
- * Creates a new capability token
+ * Checks if a token has a required capability and is not expired
  */
-export function createCapabilityToken(
-  holder: string,
-  capability: string,
-  scope: 'local' | 'grid' | 'system' = 'local',
-  durationHours: number = 24
-): CapabilityToken {
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
-
-  return {
-    id: `cap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    holder,
-    capability,
-    scope,
-    issuedAt: now,
-    expiresAt,
-    active: true,
-  };
+export function hasCapability(token: CapabilityToken | null, cap: Capability): boolean {
+  if (!token) return false;
+  const now = Date.now();
+  if (now > token.expiresAt) return false;
+  return token.capabilities.includes(cap);
 }
 
 /**
- * Checks if a capability token is still valid
+ * Checks multiple capabilities (all must be present)
  */
-export function isCapabilityValid(token: CapabilityToken): boolean {
-  return token.active && new Date() < token.expiresAt;
+export function hasAllCapabilities(token: CapabilityToken | null, caps: Capability[]): boolean {
+  if (!token) return false;
+  const now = Date.now();
+  if (now > token.expiresAt) return false;
+  return caps.every(cap => token.capabilities.includes(cap));
 }
 
 /**
- * Revokes a capability token
+ * Checks if token has any of the given capabilities
  */
-export function revokeCapability(token: CapabilityToken, reason: string): CapabilityToken {
-  return {
-    ...token,
-    active: false,
-    auditLog: [...(token.auditLog || []), `Revoked: ${reason}`],
-  };
+export function hasAnyCapability(token: CapabilityToken | null, caps: Capability[]): boolean {
+  if (!token) return false;
+  const now = Date.now();
+  if (now > token.expiresAt) return false;
+  return caps.some(cap => token.capabilities.includes(cap));
 }
 
 /**
- * Adds constraint to capability
+ * Gets remaining TTL in milliseconds
  */
-export function addConstraint(token: CapabilityToken, constraint: string): CapabilityToken {
-  return {
-    ...token,
-    constraints: [...(token.constraints || []), constraint],
-  };
+export function getTokenTTL(token: CapabilityToken | null): number {
+  if (!token) return 0;
+  const now = Date.now();
+  const remaining = token.expiresAt - now;
+  return Math.max(0, remaining);
 }
 
 /**
- * Logs an action in the capability audit trail
+ * Checks if token is expired
  */
-export function logCapabilityUse(token: CapabilityToken, action: string): CapabilityToken {
-  return {
-    ...token,
-    auditLog: [...(token.auditLog || []), `${new Date().toISOString()}: ${action}`],
-  };
+export function isTokenExpired(token: CapabilityToken | null): boolean {
+  if (!token) return true;
+  return Date.now() > token.expiresAt;
 }
